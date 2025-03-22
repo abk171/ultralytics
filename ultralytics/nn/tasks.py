@@ -33,6 +33,7 @@ from ultralytics.nn.modules import (
     C2fPSA,
     C3Ghost,
     C3k2,
+    C3k2NeXt,
     C3x,
     CBFuse,
     CBLinear,
@@ -46,6 +47,8 @@ from ultralytics.nn.modules import (
     DWConvTranspose2d,
     Focus,
     GhostBottleneck,
+    DyT,
+    ConvNeXtBottleNeck,
     GhostConv,
     HGBlock,
     HGStem,
@@ -1102,6 +1105,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             ConvTranspose,
             GhostConv,
             Bottleneck,
+            DyT,
+            ConvNeXtBottleNeck,
             GhostBottleneck,
             SPP,
             SPPF,
@@ -1114,6 +1119,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             C2,
             C2f,
             C3k2,
+            C3k2NeXt,
             RepNCSPELAN4,
             ELAN1,
             ADown,
@@ -1140,6 +1146,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             C2,
             C2f,
             C3k2,
+            C3k2NeXt,
             C2fAttn,
             C3,
             C3TR,
@@ -1153,13 +1160,16 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
-        m = (
-            getattr(torch.nn, m[3:])
-            if "nn." in m
-            else getattr(__import__("torchvision").ops, m[16:])
-            if "torchvision.ops." in m
-            else globals()[m]
-        )  # get module
+        try:
+            m = (
+                getattr(torch.nn, m[3:])
+                if "nn." in m
+                else getattr(__import__("torchvision").ops, m[16:])
+                if "torchvision.ops." in m
+                else globals()[m]
+            )  # get module
+        except KeyError:
+            raise KeyError(f'{m} not found')
         for j, a in enumerate(args):
             if isinstance(a, str):
                 with contextlib.suppress(ValueError):
