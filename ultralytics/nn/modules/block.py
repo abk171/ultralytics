@@ -33,6 +33,8 @@ __all__ = (
     "Proto",
     "RepC3",
     "ResNetLayer",
+    "DyT",
+    "ConvNeXtBottleNeck",
     "RepNCSPELAN4",
     "ELAN1",
     "ADown",
@@ -41,6 +43,7 @@ __all__ = (
     "CBFuse",
     "CBLinear",
     "C3k2",
+    "C3k2NeXt",
     "C2fPSA",
     "C2PSA",
     "RepVGGDW",
@@ -564,6 +567,57 @@ class ResNetLayer(nn.Module):
         """Forward pass through the ResNet layer."""
         return self.layer(x)
 
+class DyT(nn.Module):
+    def __init__(self, dims, init_alpha=0.5):
+        super().__init__()
+        self.alpha = nn.Parameter(torch.ones(1) * init_alpha)
+        self.gamma = nn.Parameter(torch.ones(dims))
+        self.beta = nn.Parameter(torch.zeros(dims))
+
+    def forward(self, x):
+        return self.gamma * torch.tanh(self.alpha * x) + self.beta
+
+
+class ConvNeXtBottleNeck(nn.Module):
+    def __init__(self, dim, layer_scale_init_value=1e-6, drop=0.2, **kwargs):
+        super().__init__()
+        
+        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
+        
+        # self.norm = nn.LayerNorm(dim)
+        self.norm = DyT(dim)
+        
+        self.pwconv1 = nn.Linear(dim, 4 * dim)
+        self.act = nn.GELU()
+        self.pwconv2 = nn.Linear(4 * dim, dim)
+        
+        self.dropout = nn.Dropout2d(p=drop)
+        
+        self.gamma = nn.Parameter(layer_scale_init_value * torch.ones((dim,)), requires_grad=True) if layer_scale_init_value > 0 else None
+    
+    
+    def forward(self, x):
+        residual = x
+        x = self.dwconv(x)
+        
+        # Transpose for LayerNorm
+        x = x.permute(0, 2, 3, 1)
+        x = self.norm(x)
+        
+        x = self.pwconv1(x)
+        x = self.act(x)
+        x = self.pwconv2(x)
+        
+        x = self.dropout(x)
+        
+        if self.gamma is not None:
+            x = self.gamma * x
+        
+        # Transpose back to (B, C, H, W)
+        x = x.permute(0, 3, 1, 2)
+        # no drop path y
+        return residual + x
+
 
 class MaxSigmoidAttnBlock(nn.Module):
     """Max Sigmoid attention block."""
@@ -1077,6 +1131,13 @@ class C3k2(C2f):
         super().__init__(c1, c2, n, shortcut, g, e)
         self.m = nn.ModuleList(
             C3k(self.c, self.c, 2, shortcut, g) if c3k else Bottleneck(self.c, self.c, shortcut, g) for _ in range(n)
+        )
+
+class C3k2NeXt(C2f):
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        super().__init__(c1,c2,n,shortcut,g,e)
+        self.m = nn.ModuleList(
+            C3k(self.c, self.c, 2, shortcut, g) if c3k else ConvNeXtBottleNeck(self.c) for _ in range(n)
         )
 
 
