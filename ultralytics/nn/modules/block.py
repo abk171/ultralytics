@@ -568,6 +568,7 @@ class ResNetLayer(nn.Module):
         return self.layer(x)
 
 class DyT(nn.Module):
+    """Dynamic tanh implementation"""
     def __init__(self, dims, init_alpha=0.5):
         super().__init__()
         self.alpha = nn.Parameter(torch.ones(1) * init_alpha)
@@ -579,6 +580,13 @@ class DyT(nn.Module):
 
 
 class ConvNeXtBottleNeck(nn.Module):
+    """
+    A ConvNeXt block implementation with dynamic tanh normalization
+
+    dim(int): number of channels
+    layer_scale_init_value(float): layerscale as described in convnext (optional; default=1e-6)
+    drop(float): dropout probability (optional; default=0.2)
+    """
     def __init__(self, dim, layer_scale_init_value=1e-6, drop=0.2, **kwargs):
         super().__init__()
         
@@ -1134,6 +1142,7 @@ class C3k2(C2f):
         )
 
 class C3k2NeXt(C2f):
+    """C3k2 block using ConvNeXtBottleNecks"""
     def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
         super().__init__(c1,c2,n,shortcut,g,e)
         self.m = nn.ModuleList(
